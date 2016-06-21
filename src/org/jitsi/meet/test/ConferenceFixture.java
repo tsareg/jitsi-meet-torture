@@ -15,6 +15,7 @@
  */
 package org.jitsi.meet.test;
 
+import io.appium.java_client.ios.IOSDriver;
 import org.jitsi.meet.test.util.*;
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.*;
@@ -25,6 +26,8 @@ import org.openqa.selenium.remote.*;
 import org.openqa.selenium.safari.*;
 
 import java.io.*;
+import java.net.MalformedURLException;
+import java.net.URL;
 import java.util.concurrent.*;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.*;
@@ -149,6 +152,11 @@ public class ConferenceFixture
     private static WebDriver thirdParticipant;
 
     /**
+     * The ios participant.
+     */
+    private static WebDriver iosParticipant;
+
+    /**
      * Owner is hung up.
      */
     private static boolean ownerHungUp = false;
@@ -164,6 +172,11 @@ public class ConferenceFixture
     private static boolean thirdParticipantHungUp = false;
 
     /**
+     * IosParticipant is hung up.
+     */
+    private static boolean iosParticipantHungUp = false;
+
+    /**
      * Participant drivers enum.
      */
     private enum Participant
@@ -171,7 +184,8 @@ public class ConferenceFixture
         ownerDriver,
         secondParticipantDriver,
         thirdParticipantDriver,
-        otherParticipantDriver
+        otherParticipantDriver,
+        iosParticipantDriver
     }
 
     /**
@@ -244,6 +258,30 @@ public class ConferenceFixture
     public static WebDriver getThirdParticipantInstance()
     {
         return thirdParticipant;
+    }
+
+    /**
+     * Returns the currently allocated ios participant. If missing
+     * will try to create it.
+     * @return the currently allocated ios participant.
+     */
+    public static WebDriver getIosParticipant()
+    {
+        if(iosParticipant == null || iosParticipantHungUp)
+        {
+            startIosParticipant();
+        }
+
+        return iosParticipant;
+    }
+
+    /**
+     * Returns the currently allocated ios participant if available.
+     * @return the currently allocated ios participant.
+     */
+    public static WebDriver getIosParticipantInstance()
+    {
+        return iosParticipant;
     }
 
     /**
@@ -345,6 +383,54 @@ public class ConferenceFixture
         TestUtils.waitMillis(1000);
 
         return wd;
+    }
+
+    /**
+     * Starts a {@code WebDriver} instance using default settings.
+     * @param participant the participant we are creating a driver for.
+     * @return the {@code WebDriver} instance.
+     */
+    private static WebDriver startIosDriver(Participant participant)
+    {
+        WebDriver wd = startIosDriverInstance(participant);
+
+        //wd.manage().timeouts().pageLoadTimeout(60, TimeUnit.SECONDS);
+
+        // just wait the instance to start before doing some stuff
+        // can kick a renderer bug hanging
+        TestUtils.waitMillis(1000);
+
+        return wd;
+    }
+
+    /**
+     * Starts a <tt>WebDriver</tt> instance using default settings.
+     * @param participant the participant we are creating a driver for.
+     * @return the <tt>WebDriver</tt> instance.
+     */
+    private static WebDriver startIosDriverInstance(Participant participant)
+    {
+        // TODO: this should come from settings
+        final String appPath = "/Users/Defender/Work/Atlassian/jitsi-meet-react/ios/build/Build/Products/Debug-iphonesimulator/JitsiMeetApp.app";
+
+        final URL appiumServerUrl;
+        final DesiredCapabilities caps = new DesiredCapabilities();
+        caps.setCapability("platformName", "iOS");
+        caps.setCapability("platformVersion", "9.3");
+        caps.setCapability("app", appPath);
+        caps.setCapability("deviceName", "iPhone 6");
+        caps.setCapability("launchTimeout", 999999999);
+        caps.setCapability("newCommandTimeout", 999999999);
+
+        try {
+            appiumServerUrl = new URL("http://127.0.0.1:4723/wd/hub");
+        } catch (MalformedURLException e) {
+            System.err.println("Invalid Appium server URL");
+            return null;
+        }
+
+        System.err.println("Just create IOSDriver, may hang!");
+        return new IOSDriver(appiumServerUrl, caps);
     }
 
     /**
@@ -563,6 +649,15 @@ public class ConferenceFixture
     }
 
     /**
+     * Starts <tt>iosParticipant</tt>.
+     * @return the {@code WebDriver} which was started.
+     */
+    public static WebDriver startIosParticipant()
+    {
+        return startIosParticipant(null);
+    }
+
+    /**
      * Starts the third participant reusing the already generated room name.
      * Checks if instance is created do not create it again, if its just not in
      * the room just join there.
@@ -591,7 +686,31 @@ public class ConferenceFixture
 
         return thirdParticipant;
     }
-    
+
+    /**
+     * Starts the ios participant reusing the already generated room name.
+     * Checks if instance is created do not create it again, if its just not in
+     * the room just join there.
+     * @param fragment A string to be added to the URL as a parameter (i.e.
+     * prefixed with a '&').
+     * @return the {@code WebDriver} which was started.
+     */
+    public static WebDriver startIosParticipant(String fragment)
+    {
+        System.err.println("Starting ios participant.");
+
+        if (iosParticipant == null)
+            iosParticipant
+                    = startIosDriver(Participant.iosParticipantDriver);
+
+        // TODO: add code here
+        //openRoom(thirdParticipant, fragment, browser);
+
+        iosParticipantHungUp = false;
+
+        return iosParticipant;
+    }
+
     /**
      * Starts the participant reusing the already generated room name.
      * Checks if instance is created do not create it again, if its just not in
@@ -608,8 +727,8 @@ public class ConferenceFixture
         BrowserType browser
             = BrowserType.valueOfString(
                 System.getProperty(BROWSER_OWNER_NAME_PROP));
-        
-        WebDriver participant = 
+
+        WebDriver participant =
             startDriver(browser, Participant.otherParticipantDriver);
 
         openRoom(participant, fragment, browser);
@@ -627,6 +746,8 @@ public class ConferenceFixture
      */
     public static void close(WebDriver participant)
     {
+        // TODO: add code for iOS participant
+
         if (participant == null)
         {
             System.err.println("close(): participant is null");
@@ -717,6 +838,9 @@ public class ConferenceFixture
         {
             thirdParticipant = null;
         }
+        else if (participant == iosParticipant) {
+            iosParticipant = null;
+        }
     }
 
     /**
@@ -789,6 +913,7 @@ public class ConferenceFixture
     {
         ConferenceFixture.closeSecondParticipant();
         ConferenceFixture.closeThirdParticipant();
+        ConferenceFixture.closeIosParticipant();
         ConferenceFixture.close(ConferenceFixture.getOwnerInstance());
     }
 
@@ -800,6 +925,7 @@ public class ConferenceFixture
         waitForOwnerToJoinMUC();
         closeSecondParticipant();
         closeThirdParticipant();
+        closeIosParticipant();
     }
 
     /**
@@ -836,6 +962,17 @@ public class ConferenceFixture
         if (thirdParticipant != null)
         {
             close(thirdParticipant);
+        }
+    }
+
+    /**
+     * Closes {@code iosParticipant}, if it exists.
+     */
+    public static void closeIosParticipant()
+    {
+        if (iosParticipant != null)
+        {
+            close(iosParticipant);
         }
     }
 
@@ -901,6 +1038,10 @@ public class ConferenceFixture
         {
             return "thirdParticipant";
         }
+        else if (iosParticipant == driver)
+        {
+            return "iosParticipant";
+        }
         else
         {
             return "unknownDriverInstance";
@@ -928,6 +1069,10 @@ public class ConferenceFixture
         else if (Participant.thirdParticipantDriver == p)
         {
             return "thirdParticipant";
+        }
+        else if (Participant.iosParticipantDriver == p)
+        {
+            return "iosParticipant";
         }
         else
         {
